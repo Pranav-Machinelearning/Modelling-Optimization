@@ -1,3 +1,19 @@
+import os, warnings
+warnings.filterwarnings("ignore")
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
+sns.set(style='whitegrid', font_scale=0.8)
+
+from sklearn.model_selection import train_test_split
+from sklearn.gaussian_process import GaussianProcessClassifier
+from sklearn.gaussian_process.kernels import RBF
+from sklearn.metrics import classification_report, accuracy_score
+
+# Load the dataset into the variable df_load
+df_load = pd.read_csv("C:\\Users\\prana\\OneDrive\\Documents\\Dataset\\heart_cleveland_upload.csv")
+
 import os,warnings;warnings.filterwarnings("ignore")
 import numpy as np;import pandas as pd;import matplotlib.pyplot as plt
 import seaborn as sns;sns.set(style='whitegrid',font_scale=0.8)
@@ -211,4 +227,85 @@ lst_theta = [10,100, 500, 1000, 1500, 2000, 2500]
 lst_sig = [0.01,0.1,1.0,10,50,100, 500]
 modelEval(df_load,lst_theta,lst_sig)
 
+# Split the data into training and test sets (70:30 ratio)
+X = df_load.drop('condition', axis=1)
+y = df_load['condition']
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, random_state=41)
 
+# Gaussian Process Classifier
+kernel = 1.0 * RBF(length_scale=1.0)
+gpc = GaussianProcessClassifier(kernel=kernel, max_iter_predict=100)
+gpc.fit(X_train, y_train)
+
+# Predictions
+y_pred = gpc.predict(X_test)
+
+# Evaluate the model
+print("Classification Report:\n", classification_report(y_test, y_pred))
+print("Accuracy Score:", accuracy_score(y_test, y_pred))
+
+# Dummy Classifier for comparison
+from sklearn.dummy import DummyClassifier as DC
+
+model = DC(strategy="most_frequent")
+model.fit(X_train, y_train)
+print(f'DC(): {model.score(X_test, y_test)}')
+
+# Grid search for hyperparameters
+from sklearn.model_selection import GridSearchCV
+
+lst_theta = [0.01, 0.1, 1, 10, 100, 1000, 5000]
+lst_sigma = [0.01, 0.1, 1, 10, 100, 1000, 5000]
+
+def heatmap1(scores, xlabel, xticklabels, ylabel, yticklabels):
+    plt.figure(figsize=(10, 8))
+    sns.heatmap(scores, annot=True, fmt=".3f", xticklabels=xticklabels, yticklabels=yticklabels)
+    plt.xlabel(xlabel)
+    plt.ylabel(ylabel)
+    plt.show()
+
+def modelEval(ldf, lst_theta, lst_sigma, feature='condition'):
+    # Given a dataframe, split feature/target variable
+    X = ldf.copy()
+    y = ldf[feature].copy()
+    del X[feature]
+
+    # Define parameters for gridsearch (theta, sigma)
+    param_grid = {
+        'kernel__k1__constant_value': lst_theta,
+        'kernel__k2__length_scale': lst_sigma
+    }
+
+    # Define the model with initial parameters
+    kernel = 1.0 * RBF(length_scale=1.0)
+    model = GaussianProcessClassifier(kernel=kernel)
+
+    # Grid search with 5-fold cross-validation
+    gscv = GridSearchCV(model, param_grid, cv=5)
+    gscv.fit(X.values, y.values)
+    results = pd.DataFrame(gscv.cv_results_) 
+    scores = np.array(results.mean_test_score).reshape(len(lst_theta), len(lst_sigma))
+
+    # Plot the cross-validation mean scores of the 5-fold CV
+    heatmap1(scores, xlabel='theta', xticklabels=lst_theta, ylabel='sigma', yticklabels=lst_sigma)
+
+# Example usage with a sample dataframe
+# Assuming df_load and lst_ecg are defined appropriately
+lst_ecg = ['oldpeak','restecg','slope','condition']
+ldf1 = df_load[lst_ecg]  # Subset of ECG features
+modelEval(ldf1, lst_theta, lst_sigma)
+
+# Cross Validation
+lst_theta = [10, 100, 500, 1000, 1500, 2000, 2500]
+lst_sig = [0.01, 0.1, 1.0, 10, 50, 100, 500]
+
+lst_blood = ['trestbps', 'thalach', 'fbs', 'chol', 'condition']
+ldf2 = df_load[lst_blood]
+modelEval(ldf2, lst_theta, lst_sig)
+
+lst = ['age', 'sex']
+ldf3 = df_load[lst + lst_ecg]
+modelEval(ldf3, lst_theta, lst_sig)
+
+# Categorical Feature Model
+modelEval(df_load, lst_theta, lst_sig)
